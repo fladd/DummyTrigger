@@ -62,12 +62,11 @@ class MainApplication(ttk.Frame):
                 label="About DummyTrigger",
                 command=lambda: AboutDialogue(self.parent).show())
         else:
-            self.file_menu = tk.Menu(self.menubar)
+            self.help_menu = tk.Menu(self.menubar)
             self.menubar.add_cascade(menu=self.help_menu, label="Help")
             self.help_menu.add_command(
                 label="About DummyTrigger",
-                command=lambda: AboutDialogue(self.parent).show(),
-                accelerator="F1")
+                command=lambda: AboutDialogue(self.parent).show())
         self.parent["menu"] = self.menubar
 
     def create_widgets(self):
@@ -86,7 +85,10 @@ class MainApplication(ttk.Frame):
         self.port_menu = ttk.Combobox(settings_frame)
         self.port_menu['state'] = "readonly"
         self.port_menu['values'] = ports
-        self.port_menu.set(ports[0])
+        try:
+            self.port_menu.set(ports[0])
+        except:
+            pass
         self.port_menu.grid(column=1, row=0, columnspan=2, sticky="nesw")
         tr_label = ttk.Label(settings_frame, text="TR:")
         tr_label.grid(column=0, row=1, sticky="nes")
@@ -261,7 +263,7 @@ if __name__ == "__main__":
     root = tk.Tk()
     style = ttk.Style()
     style.theme_use("default")
-    root.title(__doc__.strip())
+    root.title(__doc__.split("\n")[0])
     root.resizable(False, False)
     root.option_add('*tearOff', tk.FALSE)
     app = MainApplication(root, padding="5 5 5 5")

@@ -14,6 +14,7 @@ import time
 import platform
 import sys
 if sys.version[0] == '3':
+    PYTHON3 = True
     import tkinter as tk
     import tkinter.ttk as ttk
     from tkinter import scrolledtext
@@ -21,11 +22,12 @@ if sys.version[0] == '3':
     from tkinter import messagebox
     from tkinter import font as tkFont
 else:
+    PYTHON3 = False
     import Tkinter as tk
     import ttk as ttk
     import ScrolledText as scrolledtext
     import tkFileDialog as filedialog
-    import tkMessagebox as messagebox
+    import tkMessageBox as messagebox
     import tkFont
 
 import serial
@@ -118,10 +120,12 @@ class MainApplication(ttk.Frame):
         bottom_frame.grid(column=0, row=1, sticky="nesw")
         self.time = tk.StringVar()
         self.update_time()
-        time_label = ttk.Label(bottom_frame, textvariable=self.time)
-        time_label.grid(column=0, row=0, sticky="nsw")
+        self.time_label = ttk.Label(bottom_frame, textvariable=self.time)
+        self.time_label.grid(column=0, row=0, sticky="nsw")
         ttk.Style().configure("Green.TButton", background='green')
         ttk.Style().map("Green.TButton", background=[('active', 'green')])
+        ttk.Style().configure("Orange.TButton", background='orange')
+        ttk.Style().map("Orange.TButton", background=[('active', 'orange')])
         ttk.Style().configure("Red.TButton", background='red')
         ttk.Style().map("Red.TButton", background=[('active', 'red')])
         self.button = ttk.Button(bottom_frame, text="Start",
@@ -158,16 +162,27 @@ class MainApplication(ttk.Frame):
         if not self.started:
             try:
                 port = self.port_menu.get()
-                self.serial = serial.Serial(port, 1152000)
+                self.serial = serial.Serial(port, baudrate=115200)
+                print(self.serial)
                 self.port_menu['state'] = "disabled"
                 self.tr_entry['state'] = "disabled"
                 self.volumes_entry['state'] = "disabled"
-                self.start_time = time.time()
-                self.last_update = self.start_time
+                self.button.configure(style="Orange.TButton")
+                countdown_start = time.time()
+                while True:
+                    if (time.time() - countdown_start) * 1000 % 1000 == 0:
+                        self.button.configure(text="{0}".format(
+                            5 - int(time.time() - countdown_start)))
+                    if (time.time() - countdown_start) * 1000 >= 5000:
+                        break
+                    root.update()
                 self.button.configure(style="Red.TButton")
                 self.button.configure(text="Stop")
-                self.first_trigger = True
+                self.start_time = time.time()
+                self.last_update = self.start_time
                 self.started = True
+                self.first_trigger = True
+                self.update_time()
             except:
                 pass
         else:
@@ -185,10 +200,11 @@ class MainApplication(ttk.Frame):
 
     def trigger(self):
         if self.first_trigger:
-            self.last_update = time.time()
-            self.serial.write(bytes([ord("a")]))
+            if PYTHON3:
+                self.serial.write(bytes([255]))
+            else:
+                self.serial.write(chr(255))
             #print(int((time.time() - self.start_time) * 1000))
-            self.update_time()
             self.first_trigger = False
 
         tr = int(self.tr.get())
@@ -199,23 +215,29 @@ class MainApplication(ttk.Frame):
             while int((time.time() - self.last_update) * 1000) < tr:
                 pass
             self.last_update = time.time()
-            self.serial.write(bytes([ord("a")]))
+            if PYTHON3:
+                self.serial.write(bytes([255]))
+            else:
+                self.serial.write(chr(255))
             #print(int((time.time() - self.start_time) * 1000))
             self.update_time()
         elif int((time.time() - self.last_update) * 1000) == 1000:
             self.update_time()
 
     def update_time(self):
-        try:
+        if True:
             tr = int(self.tr.get())
             assert tr >= 100
-            total = tr * int(self.volumes.get())
+            vols = int(self.volumes.get())
+            total = tr * vols
+            current = 0
             if self.started:
+                current = int(((time.time() - self.start_time) * 1000) / tr) + 1
                 total = total - int((time.time() - self.start_time) * 1000)
             s = int(round((total / 1000) % 60))
             m = int(round((total / (1000 * 60)) % 60))
-            self.time.set("Scanning: {0:02d}:{1:02d}".format(m, s))
-        except:
+            self.time.set("Scanning: {0:02d}:{1:02d} ({2}/{3})".format(m, s, current, vols))
+        else:
             self.time.set("Scanning: --:--")
 
     def quit(self):

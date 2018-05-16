@@ -65,3 +65,6 @@ test_expyriment.py
 
 # backup file
 .bak
+
+# Pyinstaller
+*.spec

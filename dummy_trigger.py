@@ -81,7 +81,7 @@ class MainApplication(ttk.Frame):
                                         padding="5 5 5 5")
         settings_frame.columnconfigure(2, weight=1)
         settings_frame.grid(column=0, row=0, sticky="nesw")
-        ports = [x.device for x in comports()]
+        ports = sorted([x.device for x in comports()])
         port_label = ttk.Label(settings_frame, text="Port:")
         port_label.grid(column=0, row=0, sticky="nes")
         self.port_menu = ttk.Combobox(settings_frame)

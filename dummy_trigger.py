@@ -1,13 +1,13 @@
 """DummyTrigger
 
-A small application to send triggers (the character "a") to a serial port in
-regular intervals, emulating the trigger from a MR scanner.
+A small application to send triggers (custom extended ASCII character) to a
+serial port in regular intervals, emulating the trigger from an MR scanner.
 
 """
 
 
-__author__ = "Florian Krause <siebenhundertzehn@gmail.com>"
-__version__ = "0.1.0"
+__author__ = "Florian Krause <me@floriankrause.org>"
+__version__ = "0.2.0"
 
 
 import time
@@ -32,6 +32,12 @@ else:
 
 import serial
 from serial.tools.list_ports import comports
+
+
+try:
+    time = time.perf_counter
+except:
+    time = time.time
 
 
 class Spinbox(ttk.Entry):
@@ -76,6 +82,7 @@ class MainApplication(ttk.Frame):
 
         tr_vcmd = (self.register(self.validate_tr), '%P', '%s', '%S')
         volumes_vcmd = (self.register(self.validate_volumes), '%P', '%s', '%S')
+        code_vcmd = (self.register(self.validate_code), '%P', '%s', '%S')
 
         settings_frame = ttk.Labelframe(self, text='Settings',
                                         padding="5 5 5 5")
@@ -92,8 +99,18 @@ class MainApplication(ttk.Frame):
         except:
             pass
         self.port_menu.grid(column=1, row=0, columnspan=2, sticky="nesw")
+        baudrate_label = ttk.Label(settings_frame, text="Baudrate:")
+        baudrate_label.grid(column=0, row=1, sticky="nes")
+        self.baudrate_menu = ttk.Combobox(settings_frame)
+        self.baudrate_menu['state'] = "readonly"
+        self.baudrate_menu['values'] = ["50", "75", "110", "134", "150", "200",
+                                        "300", "600", "1200", "1800", "2400",
+                                        "4800", "9600", "19200", "38400",
+                                        "57600", "115200"]
+        self.baudrate_menu.set("115200")
+        self.baudrate_menu.grid(column=1, row=1, columnspan=2, sticky="news")
         tr_label = ttk.Label(settings_frame, text="TR:")
-        tr_label.grid(column=0, row=1, sticky="nes")
+        tr_label.grid(column=0, row=2, sticky="nes")
         self.tr = tk.StringVar()
         self.tr.set("2000")
         self.tr.trace('w', lambda nm, idx, mode,
@@ -101,10 +118,10 @@ class MainApplication(ttk.Frame):
         self.tr_entry = Spinbox(settings_frame, from_=100, to=9999,
                                 textvariable=self.tr, width=4, validate='all',
                                 validatecommand=tr_vcmd)
-        self.tr_entry.grid(column=1, row=1, sticky="nesw")
-        ttk.Label(settings_frame, text="ms").grid(column=2, row=1, sticky="nsw")
+        self.tr_entry.grid(column=1, row=2, sticky="nesw")
+        ttk.Label(settings_frame, text="ms").grid(column=2, row=2, sticky="nsw")
         volumes_label = ttk.Label(settings_frame, text="Measurements:")
-        volumes_label.grid(column=0, row=2, sticky="nes")
+        volumes_label.grid(column=0, row=3, sticky="nes")
         self.volumes = tk.StringVar()
         self.volumes.set("100")
         self.volumes.trace('w', lambda nm, idx, mode,
@@ -113,7 +130,23 @@ class MainApplication(ttk.Frame):
                                      textvariable=self.volumes, width=4,
                                      validate='all',
                                      validatecommand=volumes_vcmd)
-        self.volumes_entry.grid(column=1, row=2, sticky="nesw")
+        self.volumes_entry.grid(column=1, row=3, sticky="nesw")
+        code_label = ttk.Label(settings_frame, text="Code:")
+        code_label.grid(column=0, row=4, sticky="nes")
+        self.code = tk.StringVar()
+        self.code.set("33")
+        self.code_entry = Spinbox(settings_frame, from_=0, to=255,
+                                  textvariable=self.code, width=3,
+                                  validate='all',
+                                  validatecommand=code_vcmd)
+        self.code_entry.grid(column=1, row=4, sticky="news")
+        self.character = tk.StringVar()
+        self.update_character()
+        self.character_label = ttk.Label(settings_frame,
+                                         textvariable=self.character)
+        self.character_label.grid(column=2, row=4, sticky="nsw")
+
+        self.code.trace('w', self.update_character)
 
         bottom_frame = ttk.Frame(self)
         bottom_frame.columnconfigure(0, weight=1)
@@ -139,50 +172,76 @@ class MainApplication(ttk.Frame):
             child.grid_configure(padx=5, pady=5)
 
     def validate_tr(self, P, s, S):
-        valid = S == '' or (S.isdigit() and len(P) <= 4)
+        valid = (S.isdigit() and len(P) <= 4)
         if valid:
             self.update_time()
-            if len(P) < 3:
+            if len(P) < 2:
                 self.button['state'] = "disabled"
             else:
                 self.button['state'] = "normal"
         else:
-            self.bell()
+            self.tr.set(s)
         return valid
 
     def validate_volumes(self, P, s, S):
-        valid = S == '' or (S.isdigit() and len(P) <= 4)
+        valid = (S.isdigit() and len(P) <= 4)
         if valid:
             self.update_time()
+            if len(P) < 1:
+                self.button['state'] = "disabled"
+            else:
+                self.button['state'] = "normal"
         else:
-            self.bell()
+            self.volumes.set(s)
         return valid
+
+    def validate_code(self, P, s, S):
+        if len(P) == 0:
+            valid = S.isdigit()
+        else:
+            valid = S.isdigit() and 0 <= int(P) <= 255
+        if valid:
+            if len(P) < 1:
+                self.button['state'] = "disabled"
+            else:
+                self.button['state'] = "normal"
+        else:
+            self.code.set(s)
+        return valid
+
+    def update_character(self, *args):
+        code = self.code.get()
+        if code != "" and int(code) >= 32:
+            self.character.set(chr(int(code)))
 
     def start_stop(self):
         if not self.started:
             try:
                 port = self.port_menu.get()
-                self.serial = serial.Serial(port, baudrate=115200)
-                print(self.serial)
+                baudrate = self.baudrate_menu.get()
+                self.serial = serial.Serial(port, baudrate=baudrate,
+                                            write_timeout=0)
                 self.port_menu['state'] = "disabled"
                 self.tr_entry['state'] = "disabled"
                 self.volumes_entry['state'] = "disabled"
                 self.button.configure(style="Orange.TButton")
-                countdown_start = time.time()
+                countdown_start = time()
                 while True:
-                    if (time.time() - countdown_start) * 1000 % 1000 == 0:
+                    elapsed = time() - countdown_start
+                    if round((elapsed * 1000) % 1000) == 0:
                         self.button.configure(text="{0}".format(
-                            5 - int(time.time() - countdown_start)))
-                    if (time.time() - countdown_start) * 1000 >= 5000:
+                            5 - int(elapsed)))
+                    if (time() - countdown_start) * 1000 >= 5000:
                         break
                     root.update()
                 self.button.configure(style="Red.TButton")
                 self.button.configure(text="Stop")
-                self.start_time = time.time()
+                self.start_time = time()
                 self.last_update = self.start_time
                 self.started = True
                 self.first_trigger = True
                 self.update_time()
+                self.trigger()
             except:
                 pass
         else:
@@ -199,45 +258,44 @@ class MainApplication(ttk.Frame):
             self.update_time()
 
     def trigger(self):
+        code = int(self.code.get())
         if self.first_trigger:
             if PYTHON3:
-                self.serial.write(bytes([255]))
+                self.serial.write(bytes([code]))
             else:
-                self.serial.write(chr(255))
-            #print(int((time.time() - self.start_time) * 1000))
+                self.serial.write(chr(code))
             self.first_trigger = False
-
         tr = int(self.tr.get())
-        if tr * int(self.volumes.get()) - 11 <= int((time.time() - \
+        if tr * int(self.volumes.get()) - 11 <= int((time() - \
                                                      self.start_time) * 1000):
             self.start_stop()
-        elif int((time.time() - self.last_update) * 1000) >= tr - 10:
-            while int((time.time() - self.last_update) * 1000) < tr:
+        elif int((time() - self.last_update) * 1000) >= tr - 10:
+            while int((time() - self.last_update) * 1000) < tr:
                 pass
-            self.last_update = time.time()
+            self.last_update = time()
             if PYTHON3:
-                self.serial.write(bytes([255]))
+                self.serial.write(bytes([code]))
             else:
-                self.serial.write(chr(255))
-            #print(int((time.time() - self.start_time) * 1000))
+                self.serial.write(chr(code))
             self.update_time()
-        elif int((time.time() - self.last_update) * 1000) == 1000:
+        elif int((time() - self.last_update) * 1000) == 1000:
             self.update_time()
 
     def update_time(self):
-        if True:
+        try:
             tr = int(self.tr.get())
-            assert tr >= 100
             vols = int(self.volumes.get())
             total = tr * vols
             current = 0
             if self.started:
-                current = int(((time.time() - self.start_time) * 1000) / tr) + 1
-                total = total - int((time.time() - self.start_time) * 1000)
+                current = int(((time() - self.start_time) * 1000) / tr) + 1
+                total = total - int((time() - self.start_time) * 1000)
             s = int(round((total / 1000) % 60))
             m = int(round((total / (1000 * 60)) % 60))
-            self.time.set("Scanning: {0:02d}:{1:02d} ({2}/{3})".format(m, s, current, vols))
-        else:
+            self.time.set("Scanning: {0:02d}:{1:02d} ({2}/{3})".format(
+                m, s, current, vols))
+            root.update()
+        except:
             self.time.set("Scanning: --:--")
 
     def quit(self):
